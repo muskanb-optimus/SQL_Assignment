@@ -79,15 +79,42 @@ where day(Emp_DOB)=day(eomonth(Emp_DOB));
 
 with sal_cte as(
 select emp_id,new_salary,changed_date,dense_rank() over(partition by emp_id order by changed_date ) as rank
-from t_salary),cte_max as(
-select emp_id,new_salary as current_sal from sal_cte where rank=any(select max(rank) from sal_cte group by emp_id)),
+from t_salary),
+
+cte_max as(
+select emp_id,new_salary as current_sal from sal_cte where rank=any(select max(rank)
+from sal_cte group by emp_id)),
+
 cte_min as(
-select emp_id,new_salary as previous_sal from sal_cte where rank=any(select max(rank)-1 from sal_cte group by emp_id)),
-cte_combined as(select c1.emp_id,c1.current_sal,c2.previous_sal from cte_max c1 join cte_min c2 on c1.emp_id=c2.emp_id),
+select emp_id,new_salary as previous_sal 
+from sal_cte 
+where rank=any(select max(rank)-1 from sal_cte group by emp_id)),
+
+cte_combined as(
+select c1.emp_id,c1.current_sal,c2.previous_sal 
+from cte_max c1 
+join cte_min c2 on c1.emp_id=c2.emp_id),
+
 cte_name as(
 select concat(e.emp_f_name,' ',e.emp_m_name,' ',e.emp_l_name) as fullname,ct.emp_id,ct.current_sal,ct.previous_sal 
-from t_emp e join cte_combined ct on e.emp_id=ct.emp_id) select fullname,emp_id,current_sal,previous_sal,
-case when(current_sal-previous_sal)>0 then 'yes' else 'no' end as 'isincrement' from cte_name;
+from t_emp e 
+join cte_combined ct on e.emp_id=ct.emp_id),
 
+cte_curr_prev_sal as( 
+select fullname,emp_id,current_sal,previous_sal,
+case when(current_sal-previous_sal)>0 then 'yes' else 'no' end as 'isincrement' from cte_name),
+
+cte_worked_hours as(select f.fullname,f.emp_id,f.current_sal,f.previous_sal,f.isincrement,a.activity_id,sum(a.atten_end_hrs) as total_worked_hours_in_specific_act
+from cte_curr_prev_sal f
+join t_atten_det a
+on f.emp_id=a.emp_id
+group by f.emp_id,f.fullname,f.current_sal,f.previous_sal,f.isincrement,a.activity_id),
+
+final_cte as(
+select fc.fullname,fc.emp_id,fc.current_sal,fc.previous_sal,fc.isincrement,fc.activity_id,fc.total_worked_hours_in_specific_act,act.activity_description
+
+from cte_worked_hours fc
+join t_activity act
+on fc.Activity_id=act.activity_id) select *from final_cte;
 
 
